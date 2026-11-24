@@ -14,6 +14,79 @@ A Java 21-based AWS Lambda service designed to read and combine multiple images 
 
 ---
 
+## 🏗️ System Architecture
+
+The following diagram illustrates the complete serverless workflow for generating the image grid using AWS Lambda and Amazon S3:
+
+```mermaid
+flowchart TD
+    subgraph S3_Input ["Amazon S3 (Input Bucket)"]
+        Images["16 Input Images (image1.jpg ... image16.jpg)"]
+        Manifest["manifest.json (Image manifest file)"]
+    end
+
+    subgraph Event_System ["S3 Event Notification"]
+        Notification["S3 ObjectCreated Event (Triggered by manifest.json upload only)"]
+    end
+
+    subgraph Lambda ["AWS Lambda Environment"]
+        Handler["ImageGridHandler.java (Lambda Entry Point)"]
+        Generator["ImageGridGenerator.java (Grid Engine)"]
+    end
+
+    subgraph S3_Output ["Amazon S3 (Output Bucket)"]
+        OutputImage["Generated Grid Image (800x800 JPG)"]
+    end
+
+    Client["Client / User"]
+    PresignedURL["Presigned URL (Temporary Access Link)"]
+
+    %% Step 1 & 2: Client uploads to S3
+    Client -->|"1. Uploads 16 images"| Images
+    Client -->|"2. Uploads manifest.json"| Manifest
+
+    %% Step 3 & 4: S3 Notification triggers Lambda
+    Manifest -->|"3. Triggers event on manifest upload"| Notification
+    Notification -->|"4. Sends S3Event metadata (Bucket & Key)"| Handler
+
+    %% Step 5 & 6: Lambda downloads manifest and images
+    Handler -->|"5. Reads & parses manifest.json"| Manifest
+    Handler -->|"6. Downloads 16 images"| Images
+
+    %% Step 7 & 8: Lambda delegates grid processing
+    Handler -->|"7. Passes images for processing"| Generator
+    Generator -->|"8. Resizes & center-crops (200x200), arranges 4x4 grid (800x800)"| Handler
+
+    %% Step 9, 10 & 11: Output storage and Presigned URL
+    Handler -->|"9. Uploads combined 800x800 JPG"| OutputImage
+    Handler -->|"10. Generates presigned URL"| PresignedURL
+    PresignedURL -->|"11. Provides temporary access URL"| Client
+```
+
+### Architecture Highlights
+
+1. **S3 Input Bucket**:
+   - Stores exactly 16 input images to be processed into a grid.
+   - Stores `manifest.json` which specifies the image filenames and grid ordering.
+2. **S3 Event Notification**:
+   - Configured with an event filter to trigger **only** when `manifest.json` is uploaded (`s3:ObjectCreated:*`).
+   - Dispatches an asynchronous `S3Event` notification to AWS Lambda containing the S3 bucket name and manifest key.
+3. **ImageGridHandler.java (AWS Lambda Entry Point)**:
+   - Receives the `S3Event` (event metadata, not raw image bytes).
+   - Identifies the S3 bucket name and manifest object key from the event records.
+   - Downloads and reads `manifest.json`.
+   - Downloads the 16 input images from S3 into memory.
+4. **ImageGridGenerator.java**:
+   - Resizes and center-crops each image to **200 × 200 pixels** (preserving aspect ratio and cropping center).
+   - Arranges all 16 images into a balanced **4 × 4 grid**.
+   - Composites and generates one consolidated **800 × 800 pixel JPG** image.
+5. **S3 Output Bucket**:
+   - Stores the final generated 800 × 800 JPG image uploaded by the Lambda function.
+6. **Presigned URL**:
+   - Generates a secure, temporary Presigned S3 URL allowing the client to view or download the output image directly.
+
+---
+
 ## 📂 Project Structure
 
 ```text
