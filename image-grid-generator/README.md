@@ -63,8 +63,9 @@ You can test the image reading and processing logic locally using `Main.java`:
    cd image-grid-generator
    # Or run Main.java directly from your IDE
    ```
-4.To compile - mvn clean compile
-5.To Run - java -cp target/classes com.example.imagegrid.Main
+4.To compile = mvn clean compile
+5.To Run = java -cp target/classes com.example.imagegrid.Main
+
 
 ### 2. Building for AWS Lambda (Fat JAR)
 

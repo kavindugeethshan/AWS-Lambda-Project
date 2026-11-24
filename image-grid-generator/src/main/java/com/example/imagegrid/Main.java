@@ -4,7 +4,6 @@ package com.example.imagegrid;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-
 import javax.imageio.ImageIO;
 
 public class Main {
@@ -23,10 +22,7 @@ public class Main {
                     "input-images/4ab5c92d-779a-409f-840a-b172c7642b2a.JPG");
 
             // Resize and crop the image to 200x200
-            BufferedImage croppedImage = generator.resizeAndCrop(
-                    originalImage,
-                    200,
-                    200);
+            BufferedImage croppedImage = generator.resizeAndCrop(originalImage);
 
             // Save the cropped image as a JPG file
             ImageIO.write(croppedImage, "jpg", new File("test-output.jpg"));

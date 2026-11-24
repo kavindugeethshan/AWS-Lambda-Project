@@ -10,78 +10,78 @@ import java.awt.RenderingHints;
 
 public class ImageGridGenerator {
 
-    // Read an image from the given file path
-    public BufferedImage readImage(String imagePath) throws IOException {
+        // Read an image from the given file path
+        public BufferedImage readImage(String imagePath) throws IOException {
 
-        // Create a File object using the image path
-        File file = new File(imagePath);
+                // Create a File object using the image path
+                File file = new File(imagePath);
 
-        // Read the image and load it into memory
-        BufferedImage image = ImageIO.read(file);
+                // Read the image and load it into memory
+                BufferedImage image = ImageIO.read(file);
 
-        // Return the loaded image
-        return image;
-    }
+                // Return the loaded image
+                return image;
+        }
 
-    // Resize an image while preserving its aspect ratio and crop the center
-    public BufferedImage resizeAndCrop(
-            BufferedImage original,
-            int targetWidth,
-            int targetHeight) {
+        // Resize an image while preserving its aspect ratio and crop the center
+        public BufferedImage resizeAndCrop(BufferedImage original) {
 
-        // Get the original image dimensions
-        int originalWidth = original.getWidth();
-        int originalHeight = original.getHeight();
+                int targetWidth = 200;
+                int targetHeight = 200;
 
-        // Calculate the resize scale
-        double scale = Math.max(
-                (double) targetWidth / originalWidth,
-                (double) targetHeight / originalHeight);
+                // Get the original image dimensions
+                int originalWidth = original.getWidth();
+                int originalHeight = original.getHeight();
 
-        // Calculate the resized image dimensions
-        int resizedWidth = (int) (originalWidth * scale);
-        int resizedHeight = (int) (originalHeight * scale);
+                // Calculate the resize scale
+                double scale = Math.max(
+                                (double) targetWidth / originalWidth,
+                                (double) targetHeight / originalHeight);
 
-        // Create a new BufferedImage with the resized dimensions
-        BufferedImage resizedImage = new BufferedImage(
-                resizedWidth,
-                resizedHeight,
-                BufferedImage.TYPE_INT_RGB);
+                // Calculate the resized image dimensions
+                int resizedWidth = (int) (originalWidth * scale);
+                int resizedHeight = (int) (originalHeight * scale);
 
-        // Create a Graphics2D object to draw the image
-        Graphics2D graphics = resizedImage.createGraphics();
+                // Create a new BufferedImage with the resized dimensions
+                BufferedImage resizedImage = new BufferedImage(
+                                resizedWidth,
+                                resizedHeight,
+                                BufferedImage.TYPE_INT_RGB);
 
-        // Set high-quality interpolation for image resizing
-        graphics.setRenderingHint(
-                RenderingHints.KEY_INTERPOLATION,
-                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                // Create a Graphics2D object to draw the image
+                Graphics2D graphics = resizedImage.createGraphics();
 
-        // Resize and draw the original image onto the new image
-        graphics.drawImage(
-                original,
-                0,
-                0,
-                resizedWidth,
-                resizedHeight,
-                null);
+                // Set high-quality interpolation for image resizing
+                graphics.setRenderingHint(
+                                RenderingHints.KEY_INTERPOLATION,
+                                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 
-        // Release graphics resources
-        graphics.dispose();
+                // Resize and draw the original image onto the new image
+                graphics.drawImage(
+                                original,
+                                0,
+                                0,
+                                resizedWidth,
+                                resizedHeight,
+                                null);
 
-        // Calculate the center crop starting coordinates
-        int cropX = (resizedWidth - targetWidth) / 2;
-        int cropY = (resizedHeight - targetHeight) / 2;
+                // Release graphics resources
+                graphics.dispose();
 
-        // Extract the center portion with the target dimensions
-        BufferedImage croppedImage = resizedImage.getSubimage(
-                cropX,
-                cropY,
-                targetWidth,
-                targetHeight);
+                // Calculate the center crop starting coordinates
+                int cropX = (resizedWidth - targetWidth) / 2;
+                int cropY = (resizedHeight - targetHeight) / 2;
 
-        // Return the final cropped image
-        return croppedImage;
-    }
+                // Extract the center portion with the target dimensions
+                BufferedImage croppedImage = resizedImage.getSubimage(
+                                cropX,
+                                cropY,
+                                targetWidth,
+                                targetHeight);
+
+                // Return the final cropped image
+                return croppedImage;
+        }
 }
 
 /*
