@@ -17,22 +17,22 @@ public class Main {
 
         // Store the paths of 16 input images
         String[] imagePaths = {
-                "input-images/15a98e80-266a-4ef8-b942-d00c379b50d3.JPG",
-                "input-images/4ab5c92d-779a-409f-840a-b172c7642b2a.JPG",
-                "input-images/61c28817-29d8-4436-befe-877ca05cc9c1.JPG",
-                "input-images/77523128-f01d-4232-a8f9-1dedd6180b8c.JPG",
-                "input-images/8b886f25-0896-4887-a7f1-fa7774f4a2eb.JPG",
-                "input-images/8cf0313c-b42a-4b7f-87c3-dd865855f2f5.JPG",
-                "input-images/9f86dcfe-2239-48ba-89fb-43d5a3c24f55.JPG",
-                "input-images/IMG_1219.JPG",
-                "input-images/IMG_2232.JPG",
-                "input-images/IMG_2233.JPG",
-                "input-images/IMG_6130.JPG",
-                "input-images/IMG_6202.JPG",
-                "input-images/a0c5d7ec-d2aa-40fd-8d32-f5b7e8fd216d.JPG",
-                "input-images/a5a6dc10-fc98-4c43-b76f-acfdbe872525.JPG",
-                "input-images/d1e4adb4-578b-4485-8077-603daaaab4f7.JPG",
-                "input-images/fdbd2661-23ec-445b-ade3-5707b7f0af65.JPG"
+                "input-images/image1.jpg",
+                "input-images/image2.jpg",
+                "input-images/image3.jpg",
+                "input-images/image4.jpg",
+                "input-images/image5.jpg",
+                "input-images/image6.jpg",
+                "input-images/image7.jpg",
+                "input-images/image8.jpg",
+                "input-images/image9.jpg",
+                "input-images/image10.jpg",
+                "input-images/image11.jpg",
+                "input-images/image12.jpg",
+                "input-images/image13.jpg",
+                "input-images/image14.jpg",
+                "input-images/image15.jpg",
+                "input-images/image16.jpg"
         };
 
         try {

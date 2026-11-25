@@ -38,9 +38,9 @@ public class ImageGridGenerator {
                 (double) targetWidth / originalWidth,
                 (double) targetHeight / originalHeight);
 
-        // Calculate the resized image dimensions
-        int resizedWidth = (int) (originalWidth * scale);
-        int resizedHeight = (int) (originalHeight * scale);
+        // Calculate the resized image dimensions (ensuring dimensions are at least target dimensions)
+        int resizedWidth = Math.max(targetWidth, (int) Math.ceil(originalWidth * scale));
+        int resizedHeight = Math.max(targetHeight, (int) Math.ceil(originalHeight * scale));
 
         // Create a new BufferedImage with the resized dimensions
         BufferedImage resizedImage = new BufferedImage(
@@ -68,9 +68,9 @@ public class ImageGridGenerator {
         // Release graphics resources
         graphics.dispose();
 
-        // Calculate the center crop starting coordinates
-        int cropX = (resizedWidth - targetWidth) / 2;
-        int cropY = (resizedHeight - targetHeight) / 2;
+        // Calculate the center crop starting coordinates (safely clamped within raster boundaries)
+        int cropX = Math.max(0, Math.min((resizedWidth - targetWidth) / 2, resizedWidth - targetWidth));
+        int cropY = Math.max(0, Math.min((resizedHeight - targetHeight) / 2, resizedHeight - targetHeight));
 
         // Extract the center portion with the target dimensions
         BufferedImage croppedImage = resizedImage.getSubimage(

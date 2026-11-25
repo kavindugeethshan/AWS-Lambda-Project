@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.imageio.ImageIO;
@@ -15,13 +16,11 @@ import javax.imageio.ImageIO;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
-import com.amazonaws.services.lambda.runtime.events.S3Event;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
-
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -29,45 +28,44 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
-/**
- * AWS Lambda Handler for generating image grids.
- *
- * Lambda Handler Configuration:
- * com.example.imagegrid.ImageGridHandler::handleRequest
- */
-public class ImageGridHandler implements RequestHandler<S3Event, String> {
+public class ImageGridHandler
+        implements RequestHandler<Map<String, Object>, String> {
 
     @Override
-    public String handleRequest(S3Event input, Context context) {
+    public String handleRequest(Map<String, Object> input, Context context) {
 
-        // STEP 1: Initialize Lambda logger.
         LambdaLogger logger = context.getLogger();
         logger.log("ImageGridHandler invoked.");
 
-        // STEP 2: Validate incoming S3 event.
-        if (input == null || input.getRecords() == null
-                || input.getRecords().isEmpty()) {
+        // STEP 1: Read the S3 event without S3Event deserialization.
+        if (input == null || !(input.get("Records") instanceof List<?> records)
+                || records.isEmpty()) {
 
             logger.log("Invalid event: No S3 records found.");
             return "Ignored: No S3 records found.";
         }
 
-        // STEP 3: Get the first S3 event record.
-        var record = input.getRecords().get(0);
-        var s3 = record.getS3();
+        Object firstRecord = records.get(0);
 
-        // STEP 4: Extract bucket name and uploaded object key.
-        String bucketName = s3.getBucket().getName();
+        if (!(firstRecord instanceof Map<?, ?> record)
+                || !(record.get("s3") instanceof Map<?, ?> s3)
+                || !(s3.get("bucket") instanceof Map<?, ?> bucket)
+                || !(s3.get("object") instanceof Map<?, ?> object)) {
 
-        // S3 event object keys may be URL-encoded.
+            throw new IllegalArgumentException("Invalid S3 event structure.");
+        }
+
+        String bucketName = String.valueOf(bucket.get("name"));
+        String encodedKey = String.valueOf(object.get("key"));
+
         String objectKey = URLDecoder.decode(
-                s3.getObject().getKey(),
+                encodedKey,
                 StandardCharsets.UTF_8);
 
         logger.log("Input bucket: " + bucketName);
         logger.log("Uploaded object: " + objectKey);
 
-        // STEP 5: Process only manifest.json events.
+        // STEP 2: Process only manifest.json.
         if (!objectKey.equals("manifest.json")
                 && !objectKey.endsWith("/manifest.json")) {
 
@@ -75,7 +73,7 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
             return "Ignored: Not a manifest file.";
         }
 
-        // STEP 6: Get output bucket name from Lambda environment.
+        // STEP 3: Read output bucket environment variable.
         String outputBucket = System.getenv("OUTPUT_BUCKET_NAME");
 
         if (outputBucket == null || outputBucket.isBlank()) {
@@ -83,7 +81,7 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
                     "OUTPUT_BUCKET_NAME environment variable is missing.");
         }
 
-        // STEP 7: Create temporary directory for downloaded files.
+        // STEP 4: Prepare temporary directory.
         Path tempDirectory = Path.of("/tmp/image-grid");
 
         try {
@@ -91,11 +89,11 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
             logger.log("Temporary directory ready: " + tempDirectory);
 
-            // STEP 8: Create AWS S3 client and presigner.
+            // STEP 5: Create AWS clients.
             try (S3Client s3Client = S3Client.builder().build();
                     S3Presigner presigner = S3Presigner.builder().build()) {
 
-                // STEP 9: Download manifest.json from the input bucket.
+                // STEP 6: Download manifest.json.
                 GetObjectRequest manifestRequest = GetObjectRequest.builder()
                         .bucket(bucketName)
                         .key(objectKey)
@@ -109,7 +107,7 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
                 logger.log("manifest.json downloaded successfully.");
 
-                // STEP 10: Parse manifest JSON into a Java object.
+                // STEP 7: Parse manifest.
                 ObjectMapper objectMapper = new ObjectMapper();
 
                 Manifest manifest = objectMapper.readValue(
@@ -123,20 +121,17 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
                 List<String> imageNames = manifest.getImages();
 
-                // STEP 11: Validate the manifest image list.
+                // STEP 8: Validate manifest.
                 if (imageNames == null || imageNames.size() != 16) {
                     throw new IllegalArgumentException(
                             "Manifest must contain exactly 16 images.");
                 }
 
-                // Check for duplicate filenames.
                 if (imageNames.stream().distinct().count() != imageNames.size()) {
-
                     throw new IllegalArgumentException(
                             "Duplicate image filenames found.");
                 }
 
-                // Validate each filename.
                 for (String imageName : imageNames) {
 
                     if (imageName == null
@@ -153,14 +148,13 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
                 logger.log("Manifest validation successful.");
 
-                // STEP 12: Create the image generator and image array.
+                // STEP 9: Prepare image generator.
                 ImageGridGenerator generator = new ImageGridGenerator();
-
                 BufferedImage[] images = new BufferedImage[16];
 
                 int imageIndex = 0;
 
-                // STEP 13: Download all 16 images from the input bucket.
+                // STEP 10: Download and process all 16 images.
                 for (String imageName : imageNames) {
 
                     GetObjectRequest imageRequest = GetObjectRequest.builder()
@@ -172,14 +166,12 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
                             imageRequest,
                             ResponseTransformer.toBytes());
 
-                    // Save downloaded image inside Lambda /tmp.
                     Path imagePath = tempDirectory.resolve(imageName);
 
                     Files.write(imagePath, imageBytes.asByteArray());
 
                     logger.log("Downloaded image: " + imageName);
 
-                    // STEP 14: Read and process each image.
                     BufferedImage originalImage = generator.readImage(imagePath.toString());
 
                     if (originalImage == null) {
@@ -187,7 +179,6 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
                                 "Unable to read image: " + imageName);
                     }
 
-                    // Resize and center-crop image to 200x200.
                     BufferedImage processedImage = generator.resizeAndCrop(originalImage);
 
                     if (processedImage == null) {
@@ -195,9 +186,7 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
                                 "Image processing failed: " + imageName);
                     }
 
-                    // Store processed image in the array.
                     images[imageIndex] = processedImage;
-
                     imageIndex++;
 
                     logger.log("Processed image: " + imageName);
@@ -205,15 +194,14 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
                 logger.log("All 16 images processed successfully.");
 
-                // STEP 15: Create the final 800x800 image canvas.
+                // STEP 11: Create 4x4 image grid.
                 BufferedImage canvas = generator.createCanvas();
 
-                // STEP 16: Arrange all images into a 4x4 grid.
                 generator.arrangeImages(canvas, images);
 
                 logger.log("4x4 image grid created successfully.");
 
-                // STEP 17: Save the final grid as a JPG file.
+                // STEP 12: Save final JPG.
                 Path outputPath = tempDirectory.resolve("output-grid.jpg");
 
                 boolean imageSaved = ImageIO.write(
@@ -228,12 +216,12 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
                 logger.log("Final JPG saved: " + outputPath);
 
-                // STEP 18: Generate a unique output object key.
+                // STEP 13: Generate unique output key.
                 String outputKey = "grids/"
                         + UUID.randomUUID()
                         + "-output-grid.jpg";
 
-                // STEP 19: Upload the JPG to the output S3 bucket.
+                // STEP 14: Upload JPG to output bucket.
                 PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                         .bucket(outputBucket)
                         .key(outputKey)
@@ -247,7 +235,7 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
                 logger.log("Output JPG uploaded to S3.");
                 logger.log("Output object key: " + outputKey);
 
-                // STEP 20: Prepare a presigned URL request.
+                // STEP 15: Prepare presigned URL.
                 GetObjectRequest outputGetRequest = GetObjectRequest.builder()
                         .bucket(outputBucket)
                         .key(outputKey)
@@ -258,14 +246,13 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
                         .getObjectRequest(outputGetRequest)
                         .build();
 
-                // STEP 21: Generate the presigned URL.
+                // STEP 16: Generate presigned URL.
                 PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(presignRequest);
 
                 String imageUrl = presignedRequest.url().toString();
 
                 logger.log("Presigned URL generated successfully.");
 
-                // STEP 22: Return the URL.
                 return "Success: Image grid generated.\n"
                         + "Output bucket: " + outputBucket + "\n"
                         + "Output key: " + outputKey + "\n"
@@ -275,7 +262,6 @@ public class ImageGridHandler implements RequestHandler<S3Event, String> {
 
         } catch (Exception e) {
 
-            // STEP 23: Log the error and report Lambda failure.
             logger.log("Image grid generation failed: "
                     + e.getClass().getSimpleName()
                     + " - " + e.getMessage());
