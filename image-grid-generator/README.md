@@ -121,28 +121,37 @@ A standalone Java application to test and verify the image grid logic on the loc
 - **Status:** Successfully executed and verified locally.
 
 ### ImageGridHandler.java (AWS Lambda Entry Point)
-The serverless entry point invoked by AWS Lambda upon receiving S3 events:
-- **Interface Implementation:** Implements `RequestHandler<S3Event, String>`.
-- **Event Extraction:** Captures incoming records from `S3Event.getRecords()`.
-- **Record Validation:** Validates whether records are `null` or empty, returning early if no records are found.
-- **Single Record Handling:** Inspects the first event record (`records.get(0)`).
-- **S3 Metadata Retrieval:** Extracts the bucket name (`s3.getBucket().getName()`) and object key (`s3.getObject().getKey()`).
-- **CloudWatch Logging:** Utilizes `LambdaLogger` to record event details, bucket names, object keys, and status messages for debugging.
-- **Object Key Filter:** Verifies that the uploaded object key ends with `manifest.json`, gracefully ignoring events triggered by other files.
-- **S3 Client Initialization:** Instantiates an AWS SDK v2 client (`S3Client.builder().build()`).
-- **Download Request:** Prepares a `GetObjectRequest` with the extracted bucket and object key.
-- **Manifest Retrieval:** Downloads the object into memory using `ResponseTransformer.toBytes()`.
-- **String Conversion:** Converts the downloaded raw bytes into a UTF-8 string via `manifestBytes.asUtf8String()`.
-- **Log Verification:** Logs the manifest JSON string to CloudWatch.
 
-> [!IMPORTANT]
-> **Implementation Boundary:**
-> `ImageGridHandler.java` currently stops after logging the downloaded `manifest.json` string. The following capabilities are **not yet implemented** in the handler:
-> - JSON parsing of `manifest.json`.
-> - Downloading the 16 image files from S3.
-> - Processing images in Lambda memory or `/tmp`.
-> - Uploading the composite image to the S3 output bucket.
-> - Generating the S3 presigned URL.
+The serverless entry point invoked by AWS Lambda upon receiving S3 events. The handler implements `RequestHandler<S3Event, String>` and executes the end-to-end serverless pipeline across **23 structured steps**:
+
+#### 📑 Execution Steps & Line-by-Line Breakdown
+
+| Lines (පේළි) | Component / Step | Description & Implementation | විස්තරය (Sinhala) |
+| :---: | :--- | :--- | :--- |
+| **1–27** | **Imports and class** | Imports required Java 2D (`BufferedImage`, `ImageIO`), NIO, Jackson (`ObjectMapper`), AWS Lambda Runtime (`RequestHandler`, `S3Event`, `LambdaLogger`), and AWS SDK v2 (`S3Client`, `S3Presigner`, S3 models). | Required Java, AWS and Jackson classes import karanawa. |
+| **29–34** | **Lambda handler** | Defines `ImageGridHandler` implementing `RequestHandler<S3Event, String>` as the entry point configured in AWS Lambda (`com.example.imagegrid.ImageGridHandler::handleRequest`). | S3 event eka receive karana handler eka define karanawa. |
+| **36–47** | **Event validation** | Initializes `LambdaLogger` (Step 1) and verifies that the incoming `S3Event` object and its record list are non-null and not empty (Step 2). | Event eka valid da, records thiyenawada balana eka. |
+| **49–58** | **S3 information** | Retrieves the first record (`records.get(0)`) (Step 3), extracts the S3 bucket name, and URL-decodes the uploaded object key using `StandardCharsets.UTF_8` (Step 4). | Input bucket name saha object key gannawa. |
+| **60–69** | **Event filtering** | Filters events so only `manifest.json` triggers processing; ignores any events for individual images or other files to prevent loops (Step 5). | manifest.json event witharak process karanawa. |
+| **71–77** | **Output bucket** | Reads the target output bucket name dynamically from the `OUTPUT_BUCKET_NAME` environment variable, avoiding hardcoded values (Step 6). | Environment variable eken output bucket name gannawa. |
+| **79–86** | **Temporary directory** | Creates the `/tmp/image-grid` directory in Lambda ephemeral storage using `Files.createDirectories()` to store working files (Step 7). | Lambda /tmp folder eka create karanawa. |
+| **88–92** | **AWS clients** | Instantiates `S3Client` and `S3Presigner` using Java `try-with-resources` to ensure AWS client resources are safely and automatically closed (Step 8). | S3 client saha presigner create karanawa. |
+| **94–107** | **Manifest download** | Builds a `GetObjectRequest` and downloads `manifest.json` from the input bucket into memory as bytes via `ResponseTransformer.toBytes()`, converting it to a UTF-8 string (Step 9). | Input S3 bucket eken manifest eka download karanawa. |
+| **109–118** | **JSON parsing** | Uses Jackson `ObjectMapper` to deserialize the manifest JSON string into a strongly-typed `Manifest` Java object (Step 10). | JSON eka Manifest Java object ekakata convert karanawa. |
+| **120–141** | **Manifest validation** | Validates that the manifest contains exactly 16 filenames, checks for duplicate entries via stream distinct count, and verifies filename safety against directory traversal (Step 11). | Images 16 da, duplicate names thiyenawada, filenames valid da balනawa. |
+| **143–149** | **Image processing setup** | Instantiates an `ImageGridGenerator` object and allocates a `BufferedImage[16]` array to hold processed images (Step 12). | Generator object eka saha 16-image array eka create karanawa. |
+| **151–170** | **Image download** | Iterates through the 16 filenames, issues `GetObjectRequest` to S3, and saves each downloaded image byte array into `/tmp/image-grid/{imageName}` (Step 13). | Images 16ma S3 eken download karala local files widihata save karanawa. |
+| **172–190** | **Image processing** | Reads each saved image using `generator.readImage()`, resizes and center-crops it to 200 × 200 px using `generator.resizeAndCrop()`, and stores it in the image array (Step 14). | Image read karala 200×200 resize/crop karanawa. |
+| **192–199** | **Canvas creation** | Calls `generator.createCanvas()` to allocate a blank 800 × 800 pixel `BufferedImage.TYPE_INT_RGB` canvas (Step 15). | 800×800 canvas eka create karanawa. |
+| **201–205** | **Grid generation** | Calls `generator.arrangeImages(canvas, images)` to lay out all 16 cropped images in a 4 × 4 grid (Step 16). | Images 16ma 4×4 layout ekakata arrange karanawa. |
+| **207–219** | **JPG creation** | Encodes and writes the finished canvas to `/tmp/image-grid/output-grid.jpg` using `ImageIO.write()` and verifies that saving succeeded (Step 17). | Final grid eka output-grid.jpg widihata save karanawa. |
+| **221–226** | **Output key** | Generates a collision-resistant S3 object key with a UUID prefix (`grids/{uuid}-output-grid.jpg`) to avoid overwriting previous grids (Step 18). | Unique S3 object name ekak generate karanawa. |
+| **228–240** | **S3 upload** | Builds a `PutObjectRequest` with `contentType("image/jpeg")` and uploads `output-grid.jpg` to the S3 output bucket using `RequestBody.fromFile()` (Step 19). | JPG eka output bucket ekata upload karanawa. |
+| **242–260** | **Presigned URL request** | Builds a `GetObjectPresignRequest` configured with a 15-minute signature duration for the generated output S3 key (Step 20). | URL request eka hadala 15-minute expiry eka set karanawa. |
+| **262–267** | **Presigned URL** | Invokes `presigner.presignGetObject()` to generate a secure, temporary HTTPS URL allowing access to the output image without public bucket access (Step 21). | Temporary download URL eka generate karanawa. |
+| **269–276** | **Return result** | Returns a comprehensive success string containing the output bucket name, output S3 key, and the generated 15-minute presigned URL (Step 22). | Bucket, object key saha URL return karanawa. |
+| **278–287** | **Error handling** | Catches all exceptions, logs detailed failure diagnostics via `LambdaLogger`, and rethrows a `RuntimeException` so AWS Lambda registers the invocation as failed (Step 23). | Error log karala Lambda failure ekak report karanawa. |
+| **Bottom (289–463)** | **Learning notes** | Contains detailed documentation on project targets, review notes, security best practices (least-privilege IAM), and future improvements directly inside the code comments. | Project progress saha future improvements record karanawa. |
 
 ---
 
@@ -159,31 +168,42 @@ Summary of completed milestones and work currently in flight:
 - [x] Local test harness (`Main.java`) producing `output-grid.jpg`.
 - [x] Initial AWS Lambda handler structure implementing `RequestHandler<S3Event, String>`.
 - [x] S3 event notification intake and record null/empty checks.
-- [x] S3 bucket name and object key extraction.
+- [x] S3 bucket name and URL-decoded object key extraction.
 - [x] `manifest.json` key validation filter.
-- [x] AWS SDK v2 `S3Client` instantiation.
-- [x] S3 object download via `ResponseTransformer.toBytes()`.
-- [x] Conversion of downloaded manifest bytes to a UTF-8 String.
-- [x] CloudWatch logging with `LambdaLogger`.
+- [x] Dynamic output bucket retrieval via environment variable (`OUTPUT_BUCKET_NAME`).
+- [x] Ephemeral storage setup (`/tmp/image-grid`).
+- [x] AWS SDK v2 `S3Client` and `S3Presigner` initialization with `try-with-resources`.
+- [x] S3 manifest download via `ResponseTransformer.toBytes()` and UTF-8 conversion.
+- [x] Jackson JSON parsing of `manifest.json` into typed `Manifest` POJO.
+- [x] Strict manifest validation (exactly 16 images, uniqueness check, path traversal prevention).
+- [x] Batch downloading of all 16 images from S3 to `/tmp/image-grid`.
+- [x] In-memory reading, 200 × 200 resizing, and center-cropping of downloaded images.
+- [x] 800 × 800 canvas composition and 4 × 4 grid arrangement via `ImageGridGenerator`.
+- [x] JPG file encoding and saving to `/tmp/image-grid/output-grid.jpg`.
+- [x] Unique UUID output key generation (`grids/{uuid}-output-grid.jpg`).
+- [x] Direct S3 upload to the output bucket with `image/jpeg` MIME type.
+- [x] 15-minute temporary Presigned URL generation using `S3Presigner`.
+- [x] Comprehensive error handling and CloudWatch failure propagation.
 
 ### In Progress
-- [ ] Completing the full cloud execution pipeline inside `ImageGridHandler.java`.
+- [ ] AWS cloud deployment, IAM role configuration, and live end-to-end testing.
 
 ---
 
 ## 6. Remaining Development Tasks
 
-Tasks remaining to complete `ImageGridHandler.java`, listed in planned execution order:
+Code implementation of the Lambda handler is complete. The remaining tasks focus on build packaging, AWS infrastructure configuration, and cloud verification:
 
-1. [ ] **Parse `manifest.json`**: Integrate a lightweight JSON parser (such as Jackson or Gson) into the project to parse the manifest content into a structured Java object/list.
-2. [ ] **Validate Manifest Contents**: Ensure `manifest.json` contains a valid list with **exactly 16 image filenames**, throwing an informative error if count or format is invalid.
-3. [ ] **Batch Download Images from S3**: Loop through the 16 validated filenames and download each image file from the S3 input bucket using `S3Client`.
-4. [ ] **Manage Ephemeral Storage (`/tmp`)**: Store downloaded image files in Lambda's local `/tmp` directory or buffer them directly into memory as `BufferedImage` instances.
-5. [ ] **Integrate `ImageGridGenerator`**: Pass the 16 downloaded images through `ImageGridGenerator` to resize and center-crop each to 200 × 200 pixels.
-6. [ ] **Assemble 800 × 800 Grid**: Render all 16 processed images onto the 800 × 800 canvas.
-7. [ ] **Upload Grid to Output S3 Bucket**: Encode the canvas to JPG format in memory and upload it to a separate S3 output bucket using `s3Client.putObject()`.
-8. [ ] **Generate S3 Presigned URL**: Use AWS SDK v2 `S3Presigner` to generate a secure, time-limited presigned URL (e.g., valid for 15 minutes) for the generated grid image.
-9. [ ] **Return Presigned URL**: Return the generated URL string as the handler's output response.
+1. [x] **Parse `manifest.json`**: Integrated Jackson `ObjectMapper` into `ImageGridHandler.java`.
+2. [x] **Validate Manifest Contents**: Implemented 16-image count check, duplicate detection, and filename security validation.
+3. [x] **Batch Download Images from S3**: Implemented loop downloading all 16 images using `S3Client`.
+4. [x] **Manage Ephemeral Storage (`/tmp`)**: Implemented `/tmp/image-grid` directory creation and local caching.
+5. [x] **Integrate `ImageGridGenerator`**: Integrated `ImageGridGenerator` for 200 × 200 resizing and center-cropping.
+6. [x] **Assemble 800 × 800 Grid**: Implemented canvas generation and 4 × 4 grid layout.
+7. [x] **Upload Grid to Output S3 Bucket**: Implemented S3 `putObject()` with UUID key to `OUTPUT_BUCKET_NAME`.
+8. [x] **Generate S3 Presigned URL**: Implemented 15-minute presigned URL generation with `S3Presigner`.
+9. [x] **Return Presigned URL**: Implemented return string with bucket, key, and presigned URL.
+10. [ ] **Cloud Deployment & Live Verification**: Deploy packaged Fat JAR to AWS Lambda, configure triggers, and test with live S3 buckets.
 
 ---
 
